@@ -4,6 +4,7 @@ interface SettingsPageProps {
   sortNewestFirst: boolean;
   setSortNewestFirst: (value: boolean) => void;
 }
+e
 export function SettingsPage({
   sortNewestFirst,
   setSortNewestFirst
