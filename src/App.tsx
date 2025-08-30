@@ -98,47 +98,7 @@ export function App() {
     const dayRecords = records.filter(record => record.date === date);
     if (dayRecords.length === 0) return 'No activities recorded for this day.';
     
-    // Check if OpenAI is configured and enabled
-    const apiKey = localStorage.getItem('aiApiKey');
-    const aiEnabled = localStorage.getItem('aiEnabled') === 'true';
-    
-    if (apiKey && aiEnabled && dayRecords.length > 0) {
-      try {
-        // Try to get OpenAI summary
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              { 
-                role: 'system', 
-                content: 'You are an AI assistant that analyzes daily activity records. Provide a concise, insightful summary that identifies patterns, achievements, and areas for improvement. Be encouraging and motivational. Keep it under 100 words.' 
-              },
-              { 
-                role: 'user', 
-                content: `Analyze these activities for ${date}: ${dayRecords.map(r => r.text).join(', ')}` 
-              }
-            ],
-            max_tokens: 150,
-            temperature: 0.7
-          })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          return data.choices?.[0]?.message?.content || generateLocalSummary(dayRecords);
-        }
-      } catch (error) {
-        console.error('Error calling OpenAI for summary:', error);
-        // Fall back to local analysis
-      }
-    }
-    
-    // Use local intelligent analysis as fallback
+    // Use local intelligent analysis (simplified for now)
     return generateLocalSummary(dayRecords);
   };
 
