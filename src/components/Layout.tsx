@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigation } from './Navigation';
 import { LogOut, UserIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { Analytics } from "@vercel/analytics/next"
 
 interface LayoutProps {
   children: React.ReactNode;
