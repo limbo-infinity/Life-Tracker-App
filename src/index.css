@@ -3,3 +3,33 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 /* DO NOT DELETE THESE TAILWIND IMPORTS, OTHERWISE THE STYLING WILL NOT RENDER AT ALL */
+
+/* Slide-from-under pop animation for the composer */
+.composer-animate {
+  animation: composerPop 350ms ease-out;
+}
+@keyframes composerPop {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Slide new records from under the composer and push down */
+.records-list .record-item {
+  animation: recordSlideIn 350ms ease-out;
+}
+@keyframes recordSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

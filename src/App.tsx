@@ -1,13 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Layout } from './components/Layout';
 import { RecordPage } from './components/RecordPage';
 import { ChatbotPage } from './components/ChatbotPage';
 import { ArchivesPage } from './components/ArchivesPage';
 import { SettingsPage } from './components/SettingsPage';
+import { LoginPage } from './components/LoginPage';
+import { supabase } from './lib/supabase';
+import type { AuthUser } from './lib/supabase';
+
 export function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('records');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
+  const [reminderEnabled, setReminderEnabled] = useState<boolean>(false);
+  const [reminderTime, setReminderTime] = useState<string>('20:00');
+  const [composerAtTop, setComposerAtTop] = useState<boolean>(true);
+  const [time24h, setTime24h] = useState<boolean>(false);
+  const [showSeconds, setShowSeconds] = useState<boolean>(false);
+  const [aiSummaryEnabled, setAiSummaryEnabled] = useState<boolean>(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [recordColor, setRecordColor] = useState<string>('#3b82f6');
   // Sample initial records
   const [records, setRecords] = useState([{
     id: 1,
@@ -35,15 +49,34 @@ export function App() {
     timestamp: '2023-08-16 19:30',
     date: '2023-08-16'
   }]);
-  const addRecord = (text: string) => {
+  const addRecord = (text: string, targetDate?: Date, imageData?: string) => {
     const now = new Date();
+    const recordDate = targetDate ? new Date(targetDate) : now;
     const newRecord = {
       id: Date.now(),
       text,
       timestamp: now.toLocaleString(),
-      date: now.toISOString().split('T')[0]
+      date: recordDate.toISOString().split('T')[0],
+      imageData
     };
-    setRecords([newRecord, ...records]);
+    setRecords(prev => [newRecord, ...prev]);
+  };
+  const deleteRecord = (id: number) => {
+    setRecords(prev => prev.filter(r => r.id !== id));
+  };
+  const editRecord = (id: number, newText: string) => {
+    const now = new Date();
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, text: newText, timestamp: now.toLocaleString() } : r));
+  };
+  const updateRecordDate = (id: number, newDate: string) => {
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, date: newDate } : r));
+  };
+  const goToDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      setCurrentDate(d);
+      setCurrentPage('records');
+    }
   };
   // Get records for the current date
   const currentDateStr = currentDate.toISOString().split('T')[0];
@@ -61,27 +94,338 @@ export function App() {
     setCurrentDate(newDate);
   };
   // Get AI summary for a specific date
-  const getAISummary = (date: string) => {
+  const getAISummary = async (date: string): Promise<string> => {
     const dayRecords = records.filter(record => record.date === date);
     if (dayRecords.length === 0) return 'No activities recorded for this day.';
-    // This would ideally call an AI API, but for demo purposes we'll generate a simple summary
+    
+    // Check if OpenAI is configured and enabled
+    const apiKey = localStorage.getItem('aiApiKey');
+    const aiEnabled = localStorage.getItem('aiEnabled') === 'true';
+    
+    if (apiKey && aiEnabled && dayRecords.length > 0) {
+      try {
+        // Try to get OpenAI summary
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { 
+                role: 'system', 
+                content: 'You are an AI assistant that analyzes daily activity records. Provide a concise, insightful summary that identifies patterns, achievements, and areas for improvement. Be encouraging and motivational. Keep it under 100 words.' 
+              },
+              { 
+                role: 'user', 
+                content: `Analyze these activities for ${date}: ${dayRecords.map(r => r.text).join(', ')}` 
+              }
+            ],
+            max_tokens: 150,
+            temperature: 0.7
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          return data.choices?.[0]?.message?.content || generateLocalSummary(dayRecords);
+        }
+      } catch (error) {
+        console.error('Error calling OpenAI for summary:', error);
+        // Fall back to local analysis
+      }
+    }
+    
+    // Use local intelligent analysis as fallback
+    return generateLocalSummary(dayRecords);
+  };
+
+  // Local intelligent summary generation
+  const generateLocalSummary = (dayRecords: any[]) => {
     const activities = dayRecords.map(r => r.text.toLowerCase());
-    let summary = `On this day, you ${activities.join(', and you ')}. `;
-    if (activities.some(a => a.includes('walk') || a.includes('exercise') || a.includes('workout'))) {
-      summary += 'You were physically active today! ';
+    
+    // Categorize activities
+    const categories = {
+      physical: activities.filter(a => 
+        a.includes('walk') || a.includes('run') || a.includes('exercise') || 
+        a.includes('workout') || a.includes('gym') || a.includes('sport') ||
+        a.includes('bike') || a.includes('swim') || a.includes('dance')
+      ),
+      mental: activities.filter(a => 
+        a.includes('read') || a.includes('book') || a.includes('study') || 
+        a.includes('learn') || a.includes('course') || a.includes('research')
+      ),
+      wellness: activities.filter(a => 
+        a.includes('meditat') || a.includes('mindful') || a.includes('yoga') ||
+        a.includes('breath') || a.includes('relax') || a.includes('rest')
+      ),
+      work: activities.filter(a => 
+        a.includes('work') || a.includes('project') || a.includes('meeting') ||
+        a.includes('deadline') || a.includes('client') || a.includes('presentation')
+      ),
+      social: activities.filter(a => 
+        a.includes('friend') || a.includes('family') || a.includes('dinner') ||
+        a.includes('party') || a.includes('call') || a.includes('visit')
+      ),
+      creative: activities.filter(a => 
+        a.includes('write') || a.includes('draw') || a.includes('paint') ||
+        a.includes('music') || a.includes('design') || a.includes('craft')
+      ),
+      health: activities.filter(a => 
+        a.includes('cook') || a.includes('meal') || a.includes('sleep') ||
+        a.includes('doctor') || a.includes('vitamin') || a.includes('water')
+      )
+    };
+
+    // Generate insights
+    let insights = [];
+    let mood = 'productive';
+    
+    if (categories.physical.length > 0) {
+      insights.push(`You were physically active with ${categories.physical.length} activity${categories.physical.length > 1 ? 'ies' : 'y'}`);
     }
-    if (activities.some(a => a.includes('read') || a.includes('book') || a.includes('study'))) {
-      summary += 'You invested in your knowledge. ';
+    
+    if (categories.mental.length > 0) {
+      insights.push(`You invested in learning with ${categories.mental.length} intellectual pursuit${categories.mental.length > 1 ? 's' : ''}`);
     }
-    if (activities.some(a => a.includes('meditat') || a.includes('mindful'))) {
-      summary += 'You took time for mental wellbeing. ';
+    
+    if (categories.wellness.length > 0) {
+      insights.push(`You prioritized mental wellbeing`);
+      mood = 'balanced';
     }
+    
+    if (categories.work.length > 0) {
+      insights.push(`You made progress on ${categories.work.length} work-related task${categories.work.length > 1 ? 's' : ''}`);
+      mood = 'focused';
+    }
+    
+    if (categories.social.length > 0) {
+      insights.push(`You connected with others socially`);
+      mood = 'social';
+    }
+    
+    if (categories.creative.length > 0) {
+      insights.push(`You expressed your creativity`);
+      mood = 'inspired';
+    }
+    
+    if (categories.health.length > 0) {
+      insights.push(`You took care of your health`);
+    }
+
+    // Determine overall day type
+    let dayType = 'balanced';
+    if (categories.physical.length >= 2) dayType = 'active';
+    if (categories.work.length >= 2) dayType = 'productive';
+    if (categories.wellness.length >= 2) dayType = 'mindful';
+    if (categories.social.length >= 2) dayType = 'social';
+    
+    // Generate summary
+    let summary = `Today was a ${dayType} day with ${dayRecords.length} recorded activities. `;
+    
+    if (insights.length > 0) {
+      summary += insights.slice(0, 3).join('. ') + '. ';
+    }
+    
+    // Add mood and recommendations
+    summary += `Your day had a ${mood} energy. `;
+    
+    if (categories.physical.length === 0 && dayRecords.length > 2) {
+      summary += 'Consider adding some physical activity tomorrow for better balance.';
+    } else if (categories.wellness.length === 0 && dayRecords.length > 2) {
+      summary += 'A moment of mindfulness could enhance your day.';
+    } else if (insights.length >= 3) {
+      summary += 'Great job maintaining a well-rounded lifestyle!';
+    }
+    
     return summary;
   };
-  return <Layout currentPage={currentPage} setCurrentPage={setCurrentPage}>
-      {currentPage === 'records' && <RecordPage records={sortedRecords} addRecord={addRecord} currentDate={currentDate} navigateDay={navigateDay} />}
+  // Persistence: load from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('records');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setRecords(parsed);
+        }
+      }
+      const storedSort = localStorage.getItem('sortNewestFirst');
+      if (storedSort !== null) setSortNewestFirst(storedSort === 'true');
+      const storedReminderEnabled = localStorage.getItem('reminderEnabled');
+      if (storedReminderEnabled !== null) setReminderEnabled(storedReminderEnabled === 'true');
+      const storedReminderTime = localStorage.getItem('reminderTime');
+      if (storedReminderTime) setReminderTime(storedReminderTime);
+      const storedComposerAtTop = localStorage.getItem('composerAtTop');
+      if (storedComposerAtTop !== null) setComposerAtTop(storedComposerAtTop === 'true');
+      const storedTime24h = localStorage.getItem('time24h');
+      if (storedTime24h !== null) setTime24h(storedTime24h === 'true');
+      const storedShowSeconds = localStorage.getItem('showSeconds');
+      if (storedShowSeconds !== null) setShowSeconds(storedShowSeconds === 'true');
+      const storedTheme = localStorage.getItem('theme');
+      if (storedTheme === 'light' || storedTheme === 'dark') setTheme(storedTheme);
+      const storedRecordColor = localStorage.getItem('recordColor');
+      if (storedRecordColor) setRecordColor(storedRecordColor);
+      const storedAiSummary = localStorage.getItem('aiSummaryEnabled');
+      if (storedAiSummary !== null) setAiSummaryEnabled(storedAiSummary === 'true');
+    } catch {}
+  }, []);
+  // Save records when changed
+  useEffect(() => {
+    try {
+      localStorage.setItem('records', JSON.stringify(records));
+    } catch {}
+  }, [records]);
+  // Save sort order
+  useEffect(() => {
+    try {
+      localStorage.setItem('sortNewestFirst', String(sortNewestFirst));
+    } catch {}
+  }, [sortNewestFirst]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('composerAtTop', String(composerAtTop));
+    } catch {}
+  }, [composerAtTop]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('time24h', String(time24h));
+      localStorage.setItem('showSeconds', String(showSeconds));
+    } catch {}
+  }, [time24h, showSeconds]);
+
+  useEffect(() => {
+    try { localStorage.setItem('aiSummaryEnabled', String(aiSummaryEnabled)); } catch {}
+  }, [aiSummaryEnabled]);
+
+  useEffect(() => {
+    try { localStorage.setItem('theme', theme); } catch {}
+    const root = document.documentElement;
+    if (theme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+  }, [theme]);
+
+  useEffect(() => {
+    try { localStorage.setItem('recordColor', recordColor); } catch {}
+    document.documentElement.style.setProperty('--record-accent', recordColor);
+  }, [recordColor]);
+
+  // Notifications: daily reminder scheduling
+  const reminderTimeoutRef = useRef<number | null>(null);
+  const scheduleNextReminder = () => {
+    if (!reminderEnabled) return;
+    // Clear existing
+    if (reminderTimeoutRef.current) {
+      window.clearTimeout(reminderTimeoutRef.current);
+      reminderTimeoutRef.current = null;
+    }
+    const [hoursStr, minutesStr] = reminderTime.split(':');
+    const hours = parseInt(hoursStr || '20', 10);
+    const minutes = parseInt(minutesStr || '0', 10);
+    const now = new Date();
+    const next = new Date();
+    next.setHours(hours, minutes, 0, 0);
+    if (next.getTime() <= now.getTime()) {
+      next.setDate(next.getDate() + 1);
+    }
+    const msUntil = next.getTime() - now.getTime();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        if ('Notification' in window) {
+          if (Notification.permission === 'granted') {
+            new Notification('Time to journal', { body: 'Add a quick note to your Life Tracker.' });
+          } else if (Notification.permission !== 'denied') {
+            const perm = await Notification.requestPermission();
+            if (perm === 'granted') {
+              new Notification('Time to journal', { body: 'Add a quick note to your Life Tracker.' });
+            }
+          }
+        }
+      } finally {
+        // Schedule the next one for the following day
+        scheduleNextReminder();
+      }
+    }, msUntil);
+    reminderTimeoutRef.current = timeoutId;
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('reminderEnabled', String(reminderEnabled));
+      localStorage.setItem('reminderTime', reminderTime);
+    } catch {}
+    // Only schedule when enabled
+    if (reminderEnabled) {
+      scheduleNextReminder();
+    } else if (reminderTimeoutRef.current) {
+      window.clearTimeout(reminderTimeoutRef.current);
+      reminderTimeoutRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reminderEnabled, reminderTime]);
+
+  // Authentication effect
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          created_at: session.user.created_at || ''
+        });
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            created_at: session.user.created_at || ''
+          });
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  // Show loading spinner while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!user) {
+    return <LoginPage onLogin={() => {}} />;
+  }
+
+  return <Layout currentPage={currentPage} setCurrentPage={setCurrentPage} addRecord={(text: string) => addRecord(text)} onLogout={handleLogout}>
+      {currentPage === 'records' && <RecordPage records={sortedRecords} addRecord={(text: string) => addRecord(text, currentDate)} currentDate={currentDate} navigateDay={navigateDay} deleteRecord={deleteRecord} editRecord={editRecord} composerAtTop={composerAtTop} time24h={time24h} showSeconds={showSeconds} getAISummary={getAISummary} aiSummaryEnabled={aiSummaryEnabled} />}
       {currentPage === 'chatbot' && <ChatbotPage records={records} />}
-      {currentPage === 'archives' && <ArchivesPage records={records} getAISummary={getAISummary} />}
-      {currentPage === 'settings' && <SettingsPage sortNewestFirst={sortNewestFirst} setSortNewestFirst={setSortNewestFirst} />}
+      {currentPage === 'archives' && <ArchivesPage records={records} getAISummary={getAISummary} updateRecordDate={updateRecordDate} goToDate={goToDate} />}
+      {currentPage === 'settings' && <SettingsPage sortNewestFirst={sortNewestFirst} setSortNewestFirst={setSortNewestFirst} records={records} setRecords={setRecords} reminderEnabled={reminderEnabled} setReminderEnabled={setReminderEnabled} reminderTime={reminderTime} setReminderTime={setReminderTime} composerAtTop={composerAtTop} setComposerAtTop={setComposerAtTop} time24h={time24h} setTime24h={setTime24h} showSeconds={showSeconds} setShowSeconds={setShowSeconds} theme={theme} setTheme={setTheme} recordColor={recordColor} setRecordColor={setRecordColor} aiSummaryEnabled={aiSummaryEnabled} setAiSummaryEnabled={setAiSummaryEnabled} />}
     </Layout>;
 }
