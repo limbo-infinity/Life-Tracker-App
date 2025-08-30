@@ -50,6 +50,7 @@ export function App() {
     date: '2023-08-16'
   }]);
   const addRecord = (text: string, targetDate?: Date, imageData?: string) => {
+    console.log('App.tsx addRecord called with:', { text, targetDate, imageData });
     const now = new Date();
     const recordDate = targetDate ? new Date(targetDate) : now;
     const newRecord = {
@@ -59,7 +60,13 @@ export function App() {
       date: recordDate.toISOString().split('T')[0],
       imageData
     };
-    setRecords(prev => [newRecord, ...prev]);
+    console.log('New record created:', newRecord);
+    console.log('Image data length:', newRecord.imageData?.length || 0);
+    setRecords(prev => {
+      const newRecords = [newRecord, ...prev];
+      console.log('Updated records state, total records:', newRecords.length);
+      return newRecords;
+    });
   };
   const deleteRecord = (id: number) => {
     setRecords(prev => prev.filter(r => r.id !== id));
@@ -144,7 +151,7 @@ export function App() {
     let mood = 'productive';
     
     if (categories.physical.length > 0) {
-      insights.push(`You were physically active with ${categories.physical.length} activity${categories.physical.length > 1 ? 'ies' : 'y'}`);
+      insights.push(`You were physically active with ${categories.physical.length} activit${categories.physical.length > 1 ? 'ies' : 'y'}`);
     }
     
     if (categories.mental.length > 0) {
@@ -382,8 +389,8 @@ export function App() {
     return <LoginPage onLogin={() => {}} />;
   }
 
-  return <Layout currentPage={currentPage} setCurrentPage={setCurrentPage} addRecord={(text: string) => addRecord(text)} onLogout={handleLogout}>
-      {currentPage === 'records' && <RecordPage records={sortedRecords} addRecord={(text: string) => addRecord(text, currentDate)} currentDate={currentDate} navigateDay={navigateDay} deleteRecord={deleteRecord} editRecord={editRecord} composerAtTop={composerAtTop} time24h={time24h} showSeconds={showSeconds} getAISummary={getAISummary} aiSummaryEnabled={aiSummaryEnabled} />}
+      return <Layout currentPage={currentPage} setCurrentPage={setCurrentPage} addRecord={(text: string, targetDate?: Date, imageData?: string) => addRecord(text, targetDate, imageData)} onLogout={handleLogout}>
+      {currentPage === 'records' && <RecordPage records={sortedRecords} addRecord={(text: string, targetDate?: Date, imageData?: string) => addRecord(text, targetDate || currentDate, imageData)} currentDate={currentDate} navigateDay={navigateDay} deleteRecord={deleteRecord} editRecord={editRecord} composerAtTop={composerAtTop} time24h={time24h} showSeconds={showSeconds} getAISummary={getAISummary} aiSummaryEnabled={aiSummaryEnabled} />}
       {currentPage === 'chatbot' && <ChatbotPage records={records} />}
       {currentPage === 'archives' && <ArchivesPage records={records} getAISummary={getAISummary} updateRecordDate={updateRecordDate} goToDate={goToDate} />}
       {currentPage === 'settings' && <SettingsPage sortNewestFirst={sortNewestFirst} setSortNewestFirst={setSortNewestFirst} records={records} setRecords={setRecords} reminderEnabled={reminderEnabled} setReminderEnabled={setReminderEnabled} reminderTime={reminderTime} setReminderTime={setReminderTime} composerAtTop={composerAtTop} setComposerAtTop={setComposerAtTop} time24h={time24h} setTime24h={setTime24h} showSeconds={showSeconds} setShowSeconds={setShowSeconds} theme={theme} setTheme={setTheme} recordColor={recordColor} setRecordColor={setRecordColor} aiSummaryEnabled={aiSummaryEnabled} setAiSummaryEnabled={setAiSummaryEnabled} />}

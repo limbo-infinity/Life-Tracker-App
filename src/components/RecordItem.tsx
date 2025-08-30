@@ -3,6 +3,7 @@ interface Record {
   id: number;
   text: string;
   timestamp: string;
+  date?: string;
   createdAt?: number;
   imageData?: string;
 }

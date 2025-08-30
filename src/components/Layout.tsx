@@ -4,11 +4,13 @@ import { LogOut, UserIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Analytics } from "@vercel/analytics/next"
 
+
+
 interface LayoutProps {
   children: React.ReactNode;
   currentPage: string;
   setCurrentPage: (page: string) => void;
-  addRecord?: (text: string) => void;
+  addRecord?: (text: string, targetDate?: Date, imageData?: string) => void;
   onLogout?: () => void;
 }
 
@@ -35,7 +37,7 @@ export function Layout({
         return 'bottom-40 right-4';
     }
   };
-  // Quick capture: global keyboard hortcut Cmd/Ctrl+J
+  // Quick capture: global keyboard shortcut Cmd/Ctrl+J
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -68,23 +70,25 @@ export function Layout({
   return <div className="flex flex-col w-full h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       {/* User info and logout button */}
       {onLogout && (
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Welcome back,</p>
-            <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">{userName}</p>
+        <div className="relative w-full px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
+            <div className="text-left">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Welcome back,</p>
+              <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">{userName}</p>
+            </div>
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors bg-gray-100 dark:bg-gray-700 rounded-lg"
+              title="Sign out"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
           </div>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-10 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors bg-gray-100 dark:bg-gray-700 rounded-lg"
-            title="Sign out"
-          >
-            <LogOut size={16} />
-            Sign out
-          </button>
         </div>
       )}
       
-      <main className="flex-1 overflow-y-auto pb-16">{children}</main>
+      <main className="flex-1 overflow-y-auto pb-16 pt-0">{children}</main>
       <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
       {addRecord && currentPage !== 'settings' && currentPage !== 'records'
       && <button onClick={() => {

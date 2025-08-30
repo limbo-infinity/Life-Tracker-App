@@ -10,7 +10,7 @@ interface Record {
 }
 interface RecordPageProps {
   records: Record[];
-  addRecord: (text: string) => void;
+  addRecord: (text: string, targetDate?: Date, imageData?: string) => void;
   currentDate: Date;
   navigateDay: (direction: 'prev' | 'next') => void;
   deleteRecord?: (id: number) => void;
